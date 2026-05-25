@@ -31,6 +31,7 @@ export namespace MuxUI {
         
         bool save_mode_active_ = false;
         std::string filename_buffer_ = "output.md";
+        std::string open_filepath_ = "";
 
         MuxEngine engine_;
         int active_tab_ = 0; 
@@ -42,6 +43,7 @@ export namespace MuxUI {
             std::ofstream file(filename_buffer_);
             if (file) {
                 file << text_buffer_;
+                open_filepath_ = filename_buffer_;
                 status_message_ = " Successfully saved to " + filename_buffer_ + "! ";
             } else {
                 status_message_ = " Error: Could not save target file! ";
@@ -50,9 +52,24 @@ export namespace MuxUI {
         }
 
     public:
-        Workspace() {
-            text_buffer_ = "type";
+        Workspace(const std::string& target_path = "") {
             text_buffer_.reserve(1024 * 16);
+            if (!target_path.empty()) {
+                open_filepath_ = target_path;
+                filename_buffer_ = target_path;
+                std::ifstream file(target_path);
+                if (file) {
+                    std::string line;
+                    while (std::getline(file, line)) {
+                        text_buffer_ += line + "\n";
+                    }
+                    status_message_ = " Loaded " + target_path + " successfully! ";
+                } else {
+                    status_message_ = " New File: " + target_path;
+                }
+            } else {
+                text_buffer_ = "";
+            }
         }
 
         void run() noexcept {
@@ -72,7 +89,20 @@ export namespace MuxUI {
 
                 ftxui::Elements visual_lines;
 
-                for (const auto& token : tokens) {
+                for (std::size_t i = 0; i < tokens.size(); ++i) {
+                    const auto& token = tokens[i];
+
+                    if (token.type == MuxBlockType::CodeBlockLine) {
+                        ftxui::Elements code_lines;
+                        while (i < tokens.size() && tokens[i].type == MuxBlockType::CodeBlockLine) {
+                            code_lines.push_back(ftxui::text(std::string(tokens[i].text_slice)) | ftxui::color(ftxui::Color::Green));
+                            ++i;
+                        }
+                        --i;
+                        visual_lines.push_back(ftxui::vbox(std::move(code_lines)) | ftxui::bgcolor(ftxui::Color::Palette256(234)) | ftxui::borderLight);
+                        continue;
+                    }
+
                     switch (token.type) {
                         case MuxBlockType::Heading1: {
                             std::string upper_str(token.text_slice);
@@ -86,9 +116,6 @@ export namespace MuxUI {
                             break;
                         case MuxBlockType::Heading3:
                             visual_lines.push_back(ftxui::text(std::string(token.text_slice)) | ftxui::bold | ftxui::color(ftxui::Color::Cyan));
-                            break;
-                        case MuxBlockType::CodeBlockLine:
-                            visual_lines.push_back(ftxui::text(std::string(token.text_slice)) | ftxui::color(ftxui::Color::Green));
                             break;
                         case MuxBlockType::Paragraph: {
                             ftxui::Elements inline_elements;
