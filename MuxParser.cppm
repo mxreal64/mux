@@ -28,6 +28,17 @@ export enum class MuxBlockType : uint8_t {
     EmptyLine
 };
 
+export enum class MuxTextStyle : uint8_t {
+    Normal,
+    Bold,
+    Italic
+};
+
+export struct MuxInlineSpan {
+    MuxTextStyle style;
+    std::string_view text;
+};
+
 export struct MuxToken {
     uint32_t id;
     MuxBlockType type;
@@ -83,5 +94,56 @@ public:
 
     [[nodiscard]] const std::vector<MuxToken>& get_tokens() const noexcept {
         return tokens_;
+    }
+
+    [[nodiscard]] static std::vector<MuxInlineSpan> tokenize_inline(std::string_view text) noexcept {
+        std::vector<MuxInlineSpan> spans;
+        spans.reserve(8);
+
+        std::size_t pos = 0;
+        while (pos < text.size()) {
+            std::string_view remaining = text.substr(pos);
+
+            if (remaining.starts_with("**")) {
+                std::size_t close = text.find("**", pos + 2);
+                if (close != std::string_view::npos) {
+                    spans.push_back({MuxTextStyle::Bold, text.substr(pos + 2, close - (pos + 2))});
+                    pos = close + 2;
+                    continue;
+                }
+            }
+
+            if (remaining.starts_with("*")) {
+                std::size_t close = text.find("*", pos + 1);
+                if (close != std::string_view::npos) {
+                    spans.push_back({MuxTextStyle::Italic, text.substr(pos + 1, close - (pos + 1))});
+                    pos = close + 1;
+                    continue;
+                }
+            }
+
+            std::size_t next_bold = text.find("**", pos);
+            std::size_t next_italic = text.find("*", pos);
+            std::size_t next_delim = std::size_t(-1);
+
+            if (next_bold != std::string_view::npos && next_italic != std::string_view::npos) {
+                next_delim = std::min(next_bold, next_italic);
+            } else if (next_bold != std::string_view::npos) {
+                next_delim = next_bold;
+            } else {
+                next_delim = next_italic;
+            }
+
+            if (next_delim == std::string_view::npos) {
+                spans.push_back({MuxTextStyle::Normal, text.substr(pos)});
+                break;
+            }
+
+            if (next_delim > pos) {
+                spans.push_back({MuxTextStyle::Normal, text.substr(pos, next_delim - pos)});
+            }
+            pos = next_delim;
+        }
+        return spans;
     }
 };
