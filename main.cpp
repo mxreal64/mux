@@ -14,9 +14,13 @@
 import std;
 import TerminalWorkspace;
 
-int main() {
-    std::println("Initializing Mux Engine Environment Core...");
-    MuxUI::Workspace app;
+int main(int argc, char* argv[]) {
+    std::string initial_file = "";
+    if (argc > 1) {
+        initial_file = argv[1];
+    }
+    
+    MuxUI::Workspace app(initial_file);
     app.run();
     return 0;
 }
