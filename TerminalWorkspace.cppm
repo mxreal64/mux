@@ -29,7 +29,6 @@ export namespace MuxUI {
         std::string text_buffer_;
         std::string status_message_ = " [Ctrl+T] Toggle View | [Ctrl+S] Save | [Ctrl+Q] Quit ";
         
-        
         bool save_mode_active_ = false;
         std::string filename_buffer_ = "output.md";
 
@@ -61,7 +60,6 @@ export namespace MuxUI {
             screen.TrackMouse(true); 
 
             ftxui::Component input_field = ftxui::Input(&text_buffer_, "Enter markdown text...");
-
             ftxui::Component save_input = ftxui::Input(&filename_buffer_, "filename.md");
 
             auto input_window = ftxui::Renderer(input_field, [input_field] {
@@ -75,27 +73,40 @@ export namespace MuxUI {
                 ftxui::Elements visual_lines;
 
                 for (const auto& token : tokens) {
-                    std::string line_str(token.text_slice);
                     switch (token.type) {
-                        case MuxBlockType::Heading1:
-                            std::transform(line_str.begin(), line_str.end(), line_str.begin(), ::toupper);
-                            visual_lines.push_back(ftxui::text("=== " + line_str + " ===") | ftxui::bold | ftxui::color(ftxui::Color::Orange1));
+                        case MuxBlockType::Heading1: {
+                            std::string upper_str(token.text_slice);
+                            std::transform(upper_str.begin(), upper_str.end(), upper_str.begin(), ::toupper);
+                            visual_lines.push_back(ftxui::text("=== " + upper_str + " ===") | ftxui::bold | ftxui::color(ftxui::Color::Orange1));
                             visual_lines.push_back(ftxui::separatorDouble());
                             break;
+                        }
                         case MuxBlockType::Heading2:
-                            visual_lines.push_back(ftxui::text("▶ " + line_str) | ftxui::bold | ftxui::color(ftxui::Color::Yellow));
+                            visual_lines.push_back(ftxui::text("▶ " + std::string(token.text_slice)) | ftxui::bold | ftxui::color(ftxui::Color::Yellow));
                             break;
                         case MuxBlockType::Heading3:
-                            visual_lines.push_back(ftxui::text(line_str) | ftxui::bold | ftxui::color(ftxui::Color::Cyan));
+                            visual_lines.push_back(ftxui::text(std::string(token.text_slice)) | ftxui::bold | ftxui::color(ftxui::Color::Cyan));
                             break;
                         case MuxBlockType::CodeBlockLine:
-                            visual_lines.push_back(ftxui::text(line_str) | ftxui::color(ftxui::Color::Green));
+                            visual_lines.push_back(ftxui::text(std::string(token.text_slice)) | ftxui::color(ftxui::Color::Green));
                             break;
-                        case MuxBlockType::Paragraph:
-                            visual_lines.push_back(ftxui::paragraph(line_str));
+                        case MuxBlockType::Paragraph: {
+                            ftxui::Elements inline_elements;
+                            auto spans = MuxEngine::tokenize_inline(token.text_slice);
+                            for (const auto& span : spans) {
+                                if (span.style == MuxTextStyle::Bold) {
+                                    inline_elements.push_back(ftxui::text(std::string(span.text)) | ftxui::bold);
+                                } else if (span.style == MuxTextStyle::Italic) {
+                                    inline_elements.push_back(ftxui::text(std::string(span.text)) | ftxui::italic);
+                                } else {
+                                    inline_elements.push_back(ftxui::text(std::string(span.text)));
+                                }
+                            }
+                            visual_lines.push_back(ftxui::hbox(std::move(inline_elements)) | ftxui::flex);
                             break;
+                        }
                         case MuxBlockType::EmptyLine:
-                            visual_lines.push_back(ftxui::separatorEmpty());
+                            visual_lines.push_back(ftxui::text(" "));
                             break;
                         default:
                             break;
@@ -103,18 +114,19 @@ export namespace MuxUI {
                 }
 
                 return ftxui::window(ftxui::text(" MUX LIVE PREVIEW ") | ftxui::bold, 
-                                     ftxui::vbox(std::move(visual_lines))) 
+                                     ftxui::vbox({
+                                         ftxui::vbox(std::move(visual_lines)),
+                                         ftxui::filler()
+                                     })) 
 
                        | ftxui::bgcolor(ftxui::Color::Black);
             });
 
             auto dynamic_tabs = ftxui::Container::Tab({ input_window, preview_pane }, &active_tab_);
-            
             auto global_layout = ftxui::Container::Vertical({ dynamic_tabs, save_input });
 
             auto global_interface = ftxui::Renderer(global_layout, [&] {
                 ftxui::Element bottom_bar;
-                
                 if (save_mode_active_) {
                     bottom_bar = ftxui::hbox({
                         ftxui::text(" Save as: ") | ftxui::bold | ftxui::color(ftxui::Color::Yellow),
@@ -133,13 +145,11 @@ export namespace MuxUI {
             });
 
             auto event_handler = ftxui::CatchEvent(global_interface, [&](ftxui::Event event) {
-                // Ctrl+Q to Quit
                 if (event == ftxui::Event::Special("\x11")) { 
                     screen.Exit();
                     return true;
                 }
 
-                // If in save mode, give input box focus priority over hotkeys
                 if (save_mode_active_) {
                     if (event == ftxui::Event::Return) {
                         execute_save();
@@ -153,13 +163,11 @@ export namespace MuxUI {
                     return save_input->OnEvent(event);
                 }
 
-                // Ctrl+T to Toggle View (Swaps cleanly between Editor and Fullscreen Preview)
                 if (event == ftxui::Event::Special("\x14")) { 
                     active_tab_ = (active_tab_ == 0) ? 1 : 0;
                     return true;
                 }
 
-                // Ctrl+S to Trigger Save Prompt Mode
                 if (event == ftxui::Event::Special("\x13")) { 
                     save_mode_active_ = true;
                     save_input->TakeFocus();
