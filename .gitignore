@@ -1,0 +1,14 @@
+
+gcm.cache/
+
+build/
+*.o
+*.gcm
+*.elf
+*.exe
+
+*.md
+!README.md
+
+.DS_Store
+Thumbs.db
