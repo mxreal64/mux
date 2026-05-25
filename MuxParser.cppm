@@ -27,13 +27,15 @@ export enum class MuxBlockType : uint8_t {
     Paragraph,
     CodeBlockLine,
     BulletItem,
+    HorizontalRule,
     EmptyLine
 };
 
 export enum class MuxTextStyle : uint8_t {
     Normal,
     Bold,
-    Italic
+    Italic,
+    InlineCode
 };
 
 export struct MuxInlineSpan {
@@ -92,6 +94,8 @@ public:
                 if (tokens_.empty() || tokens_.back().type != MuxBlockType::EmptyLine) {
                     tokens_.push_back({token_id++, MuxBlockType::EmptyLine, line});
                 }
+            } else if (line == "---") {
+                tokens_.push_back({token_id++, MuxBlockType::HorizontalRule, line});
             } else if (line.starts_with("# ")) {
                 tokens_.push_back({token_id++, MuxBlockType::Heading1, line.substr(2)});
             } else if (line.starts_with("## ")) {
@@ -120,6 +124,15 @@ public:
         while (pos < text.size()) {
             std::string_view remaining = text.substr(pos);
 
+            if (remaining.starts_with("`")) {
+                std::size_t close = text.find("`", pos + 1);
+                if (close != std::string_view::npos) {
+                    spans.push_back({MuxTextStyle::InlineCode, text.substr(pos + 1, close - (pos + 1))});
+                    pos = close + 1;
+                    continue;
+                }
+            }
+
             if (remaining.starts_with("**")) {
                 std::size_t close = text.find("**", pos + 2);
                 if (close != std::string_view::npos) {
@@ -140,15 +153,12 @@ public:
 
             std::size_t next_bold = text.find("**", pos);
             std::size_t next_italic = text.find("*", pos);
-            std::size_t next_delim = std::size_t(-1);
+            std::size_t next_code = text.find("`", pos);
+            std::size_t next_delim = std::string_view::npos;
 
-            if (next_bold != std::string_view::npos && next_italic != std::string_view::npos) {
-                next_delim = std::min(next_bold, next_italic);
-            } else if (next_bold != std::string_view::npos) {
-                next_delim = next_bold;
-            } else {
-                next_delim = next_italic;
-            }
+            if (next_bold != std::string_view::npos) next_delim = std::min(next_delim, next_bold);
+            if (next_italic != std::string_view::npos) next_delim = std::min(next_delim, next_italic);
+            if (next_code != std::string_view::npos) next_delim = std::min(next_delim, next_code);
 
             if (next_delim == std::string_view::npos) {
                 spans.push_back({MuxTextStyle::Normal, text.substr(pos)});
@@ -163,3 +173,4 @@ public:
         return spans;
     }
 };
+
