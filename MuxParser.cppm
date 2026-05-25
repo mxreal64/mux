@@ -16,6 +16,7 @@ module;
 #include <cstdint>
 #include <string_view>
 #include <vector>
+#include <algorithm>
 
 export module MuxParser; 
 
@@ -49,6 +50,12 @@ export class MuxEngine {
 private:
     std::vector<MuxToken> tokens_;
 
+    [[nodiscard]] static bool is_whitespace_only(std::string_view str) noexcept {
+        return std::all_of(str.begin(), str.end(), [](char c) {
+            return c == ' ' || c == '\t' || c == '\r' || c == '\n';
+        });
+    }
+
 public:
     MuxEngine() {
         tokens_.reserve(1024);
@@ -68,6 +75,10 @@ public:
 
             std::string_view line = buffer.substr(position, next_newline - position);
 
+            if (!line.empty() && line.back() == '\r') {
+                line.remove_suffix(1);
+            }
+
             if (line.starts_with("```")) {
                 in_code_block = !in_code_block;
                 position = next_newline + 1;
@@ -76,8 +87,10 @@ public:
 
             if (in_code_block) {
                 tokens_.push_back({token_id++, MuxBlockType::CodeBlockLine, line});
-            } else if (line.empty()) {
-                tokens_.push_back({token_id++, MuxBlockType::EmptyLine, line});
+            } else if (line.empty() || is_whitespace_only(line)) {
+                if (tokens_.empty() || tokens_.back().type != MuxBlockType::EmptyLine) {
+                    tokens_.push_back({token_id++, MuxBlockType::EmptyLine, line});
+                }
             } else if (line.starts_with("# ")) {
                 tokens_.push_back({token_id++, MuxBlockType::Heading1, line.substr(2)});
             } else if (line.starts_with("## ")) {
@@ -147,3 +160,4 @@ public:
         return spans;
     }
 };
+
