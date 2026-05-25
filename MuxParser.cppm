@@ -26,6 +26,7 @@ export enum class MuxBlockType : uint8_t {
     Heading3,
     Paragraph,
     CodeBlockLine,
+    BulletItem,
     EmptyLine
 };
 
@@ -97,6 +98,8 @@ public:
                 tokens_.push_back({token_id++, MuxBlockType::Heading2, line.substr(3)});
             } else if (line.starts_with("### ")) {
                 tokens_.push_back({token_id++, MuxBlockType::Heading3, line.substr(4)});
+            } else if (line.starts_with("- ")) {
+                tokens_.push_back({token_id++, MuxBlockType::BulletItem, line.substr(2)});
             } else {
                 tokens_.push_back({token_id++, MuxBlockType::Paragraph, line});
             }
@@ -160,5 +163,3 @@ public:
         return spans;
     }
 };
-
-
