@@ -56,7 +56,6 @@ g++ -std=c++26 -fmodules-ts main.cpp build/MuxParser.o build/TerminalWorkspace.o
 ```text
 Mux/
 ├── build/                # Local compiled object binaries (git-ignored)
-├── gcm.cache/            # Local compiler module metadata caches (git-ignored)
 ├── main.cpp              # Application system entry point
 ├── MuxParser.cppm        # Core single-pass text engine module
 ├── TerminalWorkspace.cppm # Interface state router and event framework module
