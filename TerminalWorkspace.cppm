@@ -117,6 +117,22 @@ export namespace MuxUI {
                         case MuxBlockType::Heading3:
                             visual_lines.push_back(ftxui::text(std::string(token.text_slice)) | ftxui::bold | ftxui::color(ftxui::Color::Cyan));
                             break;
+                        case MuxBlockType::BulletItem: {
+                            ftxui::Elements inline_elements;
+                            inline_elements.push_back(ftxui::text("  • ") | ftxui::color(ftxui::Color::Cyan) | ftxui::bold);
+                            auto spans = MuxEngine::tokenize_inline(token.text_slice);
+                            for (const auto& span : spans) {
+                                if (span.style == MuxTextStyle::Bold) {
+                                    inline_elements.push_back(ftxui::text(std::string(span.text)) | ftxui::bold);
+                                } else if (span.style == MuxTextStyle::Italic) {
+                                    inline_elements.push_back(ftxui::text(std::string(span.text)) | ftxui::italic);
+                                } else {
+                                    inline_elements.push_back(ftxui::text(std::string(span.text)));
+                                }
+                            }
+                            visual_lines.push_back(ftxui::hbox(std::move(inline_elements)) | ftxui::flex);
+                            break;
+                        }
                         case MuxBlockType::Paragraph: {
                             ftxui::Elements inline_elements;
                             auto spans = MuxEngine::tokenize_inline(token.text_slice);
@@ -125,6 +141,7 @@ export namespace MuxUI {
                                     inline_elements.push_back(ftxui::text(std::string(span.text)) | ftxui::bold);
                                 } else if (span.style == MuxTextStyle::Italic) {
                                     inline_elements.push_back(ftxui::text(std::string(span.text)) | ftxui::italic);
+
                                 } else {
                                     inline_elements.push_back(ftxui::text(std::string(span.text)));
                                 }
@@ -145,6 +162,7 @@ export namespace MuxUI {
                                          ftxui::vbox(std::move(visual_lines)),
                                          ftxui::filler()
                                      })) 
+
 
                        | ftxui::bgcolor(ftxui::Color::Black);
             });
@@ -208,3 +226,4 @@ export namespace MuxUI {
         }
     };
 }
+
