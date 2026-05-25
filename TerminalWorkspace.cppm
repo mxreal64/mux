@@ -1,4 +1,17 @@
-module; // Global header wrapper for standard library fallback
+// Copyright (C) 2026 mxreal64 
+// 
+// This program is free software: you can redistribute it and/or modify 
+// it under the terms of the GNU General Public License as published by 
+// the Free Software Foundation, either version 3 of the License, or 
+// (at your option) any later version. // // This program is distributed in the hope that it will be useful, 
+// but WITHOUT ANY WARRANTY; without even the implied warranty of 
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the 
+// GNU General Public License for more details. 
+// 
+// You should have received a copy of the GNU General Public License 
+// along with this program. If not, see <https://gnu.org>.
+
+module; 
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/dom/elements.hpp>
@@ -16,12 +29,12 @@ export namespace MuxUI {
         std::string text_buffer_;
         std::string status_message_ = " [Ctrl+T] Toggle View | [Ctrl+S] Save | [Ctrl+Q] Quit ";
         
-        // Interactive Saving States
+        
         bool save_mode_active_ = false;
         std::string filename_buffer_ = "output.md";
 
         MuxEngine engine_;
-        int active_tab_ = 0; // 0 = Editor, 1 = Fullscreen Preview
+        int active_tab_ = 0; 
 
         void execute_save() noexcept {
             if (filename_buffer_.empty()) {
@@ -39,7 +52,7 @@ export namespace MuxUI {
 
     public:
         Workspace() {
-            text_buffer_ = "# Project Mux\n\nBare-metal C++26 text compilation processing.\n\n## Sub-Heading Layout\n- Light\n- Fast\n- No Chromium\n\nPress Ctrl+T to toggle your screen view seamlessly!";
+            text_buffer_ = "type";
             text_buffer_.reserve(1024 * 16);
         }
 
@@ -47,17 +60,14 @@ export namespace MuxUI {
             auto screen = ftxui::ScreenInteractive::Fullscreen();
             screen.TrackMouse(true); 
 
-            // Left Input Panel Component
             ftxui::Component input_field = ftxui::Input(&text_buffer_, "Enter markdown text...");
 
-            // Custom Interactive Saving Box Component
             ftxui::Component save_input = ftxui::Input(&filename_buffer_, "filename.md");
 
             auto input_window = ftxui::Renderer(input_field, [input_field] {
                 return ftxui::window(ftxui::text(" MUX EDITOR ") | ftxui::bold, input_field->Render());
             });
 
-            // Right View Parser Rendering Engine (Updates live automatically on text change)
             auto preview_pane = ftxui::Renderer([this] {
                 engine_.parse_buffer(text_buffer_);
                 const auto& tokens = engine_.get_tokens();
@@ -68,17 +78,14 @@ export namespace MuxUI {
                     std::string line_str(token.text_slice);
                     switch (token.type) {
                         case MuxBlockType::Heading1:
-                            // Heading 1: Upper-case transform, double-underlined for maximum weight
                             std::transform(line_str.begin(), line_str.end(), line_str.begin(), ::toupper);
                             visual_lines.push_back(ftxui::text("=== " + line_str + " ===") | ftxui::bold | ftxui::color(ftxui::Color::Orange1));
                             visual_lines.push_back(ftxui::separatorDouble());
                             break;
                         case MuxBlockType::Heading2:
-                            // Heading 2: Styled bold prefix marker
                             visual_lines.push_back(ftxui::text("▶ " + line_str) | ftxui::bold | ftxui::color(ftxui::Color::Yellow));
                             break;
                         case MuxBlockType::Heading3:
-                            // Heading 3: Standard bold accent color
                             visual_lines.push_back(ftxui::text(line_str) | ftxui::bold | ftxui::color(ftxui::Color::Cyan));
                             break;
                         case MuxBlockType::CodeBlockLine:
@@ -101,10 +108,8 @@ export namespace MuxUI {
                        | ftxui::bgcolor(ftxui::Color::Black);
             });
 
-            // Tab router container controls screens exclusively
             auto dynamic_tabs = ftxui::Container::Tab({ input_window, preview_pane }, &active_tab_);
             
-            // Compose overall nested layout incorporating tab components and status panel structures
             auto global_layout = ftxui::Container::Vertical({ dynamic_tabs, save_input });
 
             auto global_interface = ftxui::Renderer(global_layout, [&] {
@@ -127,7 +132,6 @@ export namespace MuxUI {
                 ) | ftxui::bgcolor(ftxui::Color::Black);
             });
 
-            // Intercept Global Events (Hotkeys & Dynamic Context Switches)
             auto event_handler = ftxui::CatchEvent(global_interface, [&](ftxui::Event event) {
                 // Ctrl+Q to Quit
                 if (event == ftxui::Event::Special("\x11")) { 
