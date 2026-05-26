@@ -78,3 +78,6 @@ Mux/
 //
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://gnu.org>.
+
+
+Note: if anyone sees this, yes i forgot to add scrolling i'm working on it okay?
