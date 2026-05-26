@@ -1,230 +1,224 @@
-// Copyright (C) 2026 mxreal64 
-// 
-// This program is free software: you can redistribute it and/or modify 
-// it under the terms of the GNU General Public License as published by 
-// the Free Software Foundation, either version 3 of the License, or 
-// (at your option) any later version. // // This program is distributed in the hope that it will be useful, 
-// but WITHOUT ANY WARRANTY; without even the implied warranty of 
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the 
-// GNU General Public License for more details. 
-// 
-// You should have received a copy of the GNU General Public License 
-// along with this program. If not, see <https://gnu.org>.
+// Copyright (C) 2026 mxreal64
+// Licensed under the GPL-3.0 License
 
-module; 
-#include <ftxui/component/component.hpp>
-#include <ftxui/component/screen_interactive.hpp>
+module;
+
 #include <ftxui/dom/elements.hpp>
-#include <string>
-#include <vector>
-#include <chrono>
+#include <ftxui/component/component.hpp>
+#include <ftxui/component/component_base.hpp>
+#include <ftxui/component/screen_interactive.hpp>
+#include <ftxui/component/event.hpp>
+#include <ftxui/screen/color.hpp>
 
 export module TerminalWorkspace;
 
-import MuxParser; 
 import std;
+import MuxParser;
 
 export namespace MuxUI {
-    class Workspace {
-    private:
-        std::string text_buffer_;
-        std::string status_message_ = " [Ctrl+T] Toggle View | [Ctrl+S] Save | [Ctrl+Q] Quit ";
+
+class Workspace {
+private:
+    MuxEngine engine_;
+    std::string parse_time_str_ = "Parsed in: 0.000 μs";
+    std::string text_buffer_;
+    std::string file_path_;
+
+    int active_tab_ = 1; // 0 = Editor, 1 = Preview
+    bool save_mode_active_ = false;
+    std::string save_path_target_ = "untitled.md";
+
+    // --- SCROLL STATE VARIABLES ---
+    int scroll_offset_ = 0;
+    int max_visible_lines_ = 20; // Automatically adjusted at runtime
+
+    ftxui::Component editor_input_field_;
+    ftxui::Component save_input_field_;
+    ftxui::Component global_layout_container_;
+
+    void load_file_to_buffer() noexcept {
+        if (file_path_.empty()) return;
+        std::ifstream file(file_path_, std::ios::in | std::ios::binary);
+        if (!file.is_open()) return;
+
+        text_buffer_ = std::string((std::istreambuf_iterator<char>(file)), 
+                                    std::istreambuf_iterator<char>());
+    }
+
+public:
+    explicit Workspace(std::string_view initial_file) : file_path_(initial_file) {
+        load_file_to_buffer();
         
-        bool save_mode_active_ = false;
-        std::string filename_buffer_ = "output.md";
-        std::string open_filepath_ = "";
-        double parse_time_us_ = 0.0;
+        editor_input_field_ = ftxui::Input(&text_buffer_, "Write your Markdown here...");
+        save_input_field_ = ftxui::Input(&save_path_target_, "Enter path...");
 
-        MuxEngine engine_;
-        int active_tab_ = 0; 
+        global_layout_container_ = ftxui::Container::Vertical({
+            editor_input_field_,
+            save_input_field_
+        });
 
-        void execute_save() noexcept {
-            if (filename_buffer_.empty()) {
-                filename_buffer_ = "output.md";
+        execute_parsing_pipeline();
+    }
+
+    void execute_parsing_pipeline() noexcept {
+        auto start_time = std::chrono::high_resolution_clock::now();
+        engine_.parse_buffer(text_buffer_);
+        auto end_time = std::chrono::high_resolution_clock::now();
+        
+        auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end_time - start_time).count();
+        parse_time_str_ = std::format("Parsed in: {:.3f} μs", duration / 1000.0);
+    }
+
+    ftxui::Element RenderPane() {
+        ftxui::Elements preview_rows;
+        const auto& tokens = engine_.get_tokens();
+
+        // 1. Slice your token loop to strictly follow your scroll offset
+        for (std::size_t i = static_cast<std::size_t>(scroll_offset_); i < tokens.size(); ++i) {
+            const auto& token = tokens[i];
+
+            if (token.type == MuxBlockType::HorizontalRule) {
+                preview_rows.push_back(ftxui::separator());
+                continue;
             }
-            std::ofstream file(filename_buffer_);
-            if (file) {
-                file << text_buffer_;
-                open_filepath_ = filename_buffer_;
-                status_message_ = " Successfully saved to " + filename_buffer_ + "! ";
-            } else {
-                status_message_ = " Error: Could not save target file! ";
+            if (token.type == MuxBlockType::EmptyLine) {
+                preview_rows.push_back(ftxui::text(""));
+                continue;
             }
-            save_mode_active_ = false;
+
+            auto inline_spans = MuxEngine::tokenize_inline(token.text_slice);
+            ftxui::Elements row_spans;
+
+            for (const auto& span : inline_spans) {
+                ftxui::Element span_el = ftxui::text(std::string(span.text));
+                switch (span.style) {
+                    case MuxTextStyle::Bold:        span_el = ftxui::bold(span_el); break;
+                    case MuxTextStyle::Italic:      span_el = ftxui::italic(span_el); break;
+                    case MuxTextStyle::InlineCode:  span_el = span_el | ftxui::color(ftxui::Color::Green) | ftxui::bgcolor(ftxui::Color::RGB(18, 18, 18)); break;
+                    default: break;
+                }
+                row_spans.push_back(span_el);
+            }
+
+            ftxui::Element assembled_row = ftxui::hbox(std::move(row_spans));
+
+            switch (token.type) {
+                case MuxBlockType::Heading1:      preview_rows.push_back(ftxui::bold(assembled_row) | ftxui::color(ftxui::Color::Yellow)); break;
+                case MuxBlockType::Heading2:      preview_rows.push_back(ftxui::bold(assembled_row) | ftxui::color(ftxui::Color::Cyan)); break;
+                case MuxBlockType::Heading3:      preview_rows.push_back(ftxui::bold(assembled_row) | ftxui::color(ftxui::Color::BlueLight)); break;
+                case MuxBlockType::BulletItem:    preview_rows.push_back(ftxui::hbox({ftxui::text(" • ") | ftxui::color(ftxui::Color::Yellow), assembled_row})); break;
+                case MuxBlockType::CodeBlockLine: preview_rows.push_back(ftxui::hbox({ftxui::text("  "), assembled_row | ftxui::color(ftxui::Color::Green)})); break;
+                default:                          preview_rows.push_back(assembled_row); break;
+            }
         }
 
-        void append_inline_spans(ftxui::Elements& target, std::string_view text_slice) {
-            auto spans = MuxEngine::tokenize_inline(text_slice);
-            for (const auto& span : spans) {
-                if (span.style == MuxTextStyle::Bold) {
-                    target.push_back(ftxui::text(std::string(span.text)) | ftxui::bold);
-                } else if (span.style == MuxTextStyle::Italic) {
-                    target.push_back(ftxui::text(std::string(span.text)) | ftxui::italic);
-                } else if (span.style == MuxTextStyle::InlineCode) {
-                    target.push_back(ftxui::text(std::string(span.text)) | ftxui::color(ftxui::Color::Yellow) | ftxui::bgcolor(ftxui::Color::Palette256(235)));
-                } else {
-                    target.push_back(ftxui::text(std::string(span.text)));
-                }
-            }
+        // 2. Wrap rows cleanly using standard layout constraints
+        auto visible_viewport = ftxui::vbox(std::move(preview_rows)) | ftxui::flex;
+
+        ftxui::Element center_view;
+        if (active_tab_ == 0) {
+            center_view = ftxui::window(ftxui::text(" EDITOR ") | ftxui::bold, editor_input_field_->Render() | ftxui::flex);
+        } else {
+            center_view = ftxui::window(ftxui::text(" MUX LIVE PREVIEW ") | ftxui::bold, visible_viewport) | ftxui::bgcolor(ftxui::Color::Black);
         }
 
-    public:
-        Workspace(const std::string& target_path = "") {
-            text_buffer_.reserve(1024 * 16);
-            if (!target_path.empty()) {
-                open_filepath_ = target_path;
-                filename_buffer_ = target_path;
-                std::ifstream file(target_path);
-                if (file) {
-                    std::string line;
-                    while (std::getline(file, line)) {
-                        text_buffer_ += line + "\n";
-                    }
-                    status_message_ = " Loaded " + target_path + " successfully! ";
-                } else {
-                    status_message_ = " New File: " + target_path;
-                }
-            } else {
-                text_buffer_ = "";
-            }
+        ftxui::Element bottom_bar;
+        if (save_mode_active_) {
+            bottom_bar = ftxui::hbox({
+                ftxui::text(" Save Path: ") | ftxui::bold | ftxui::color(ftxui::Color::Yellow),
+                save_input_field_->Render() | ftxui::flex
+            });
+        } else {
+            bottom_bar = ftxui::hbox({
+                ftxui::text(" [Ctrl+T] Toggle View | [Ctrl+S] Save | [Ctrl+Q] Quit ") | ftxui::color(ftxui::Color::BlueLight),
+                ftxui::filler(),
+                ftxui::text(parse_time_str_) | ftxui::color(ftxui::Color::GrayLight)
+            });
         }
 
-        void run() noexcept {
-            auto screen = ftxui::ScreenInteractive::Fullscreen();
-            screen.TrackMouse(true); 
+        return ftxui::vbox(ftxui::Elements{ 
+            center_view | ftxui::flex, 
+            ftxui::separator(), 
+            bottom_bar 
+        });
+    }
 
-            ftxui::Component input_field = ftxui::Input(&text_buffer_, "Enter markdown text...");
-            ftxui::Component save_input = ftxui::Input(&filename_buffer_, "filename.md");
+    bool HandleEvent(ftxui::Event event) {
+        if (event == ftxui::Event::CtrlT) {
+            active_tab_ = (active_tab_ == 0) ? 1 : 0;
+            // Reset offset when jumping back and forth
+            scroll_offset_ = 0; 
+            return true;
+        }
+        if (event == ftxui::Event::CtrlS) {
+            save_mode_active_ = !save_mode_active_;
+            return true;
+        }
 
-            auto input_window = ftxui::Renderer(input_field, [input_field] {
-                return ftxui::window(ftxui::text(" MUX EDITOR ") | ftxui::bold, input_field->Render());
-            });
+        // --- INTERCEPT NAVIGATION INPUT CODES IN PREVIEW MODE ---
+        if (active_tab_ == 1) {
+            const int total_lines = static_cast<int>(engine_.get_tokens().size());
 
-            auto preview_pane = ftxui::Renderer([this] {
-                auto start = std::chrono::high_resolution_clock::now();
-                engine_.parse_buffer(text_buffer_);
-                auto end = std::chrono::high_resolution_clock::now();
-                parse_time_us_ = std::chrono::duration<double, std::micro>(end - start).count();
-
-                const auto& tokens = engine_.get_tokens();
-                ftxui::Elements visual_lines;
-
-                for (std::size_t i = 0; i < tokens.size(); ++i) {
-                    const auto& token = tokens[i];
-
-                    if (token.type == MuxBlockType::CodeBlockLine) {
-                        ftxui::Elements code_lines;
-                        while (i < tokens.size() && tokens[i].type == MuxBlockType::CodeBlockLine) {
-                            code_lines.push_back(ftxui::text(std::string(tokens[i].text_slice)) | ftxui::color(ftxui::Color::Green));
-                            ++i;
-                        }
-                        --i;
-                        visual_lines.push_back(ftxui::vbox(std::move(code_lines)) | ftxui::bgcolor(ftxui::Color::Palette256(234)) | ftxui::borderLight);
-                        continue;
-                    }
-
-                    switch (token.type) {
-                        case MuxBlockType::Heading1: {
-                            std::string upper_str(token.text_slice);
-                            std::transform(upper_str.begin(), upper_str.end(), upper_str.begin(), ::toupper);
-                            visual_lines.push_back(ftxui::text("=== " + upper_str + " ===") | ftxui::bold | ftxui::color(ftxui::Color::Orange1));
-                            visual_lines.push_back(ftxui::separatorDouble());
-                            break;
-                        }
-                        case MuxBlockType::Heading2:
-                            visual_lines.push_back(ftxui::text("▶ " + std::string(token.text_slice)) | ftxui::bold | ftxui::color(ftxui::Color::Yellow));
-                            break;
-                        case MuxBlockType::Heading3:
-                            visual_lines.push_back(ftxui::text(std::string(token.text_slice)) | ftxui::bold | ftxui::color(ftxui::Color::Cyan));
-                            break;
-                        case MuxBlockType::HorizontalRule:
-                            visual_lines.push_back(ftxui::separatorLight());
-                            break;
-                        case MuxBlockType::BulletItem: {
-                            ftxui::Elements inline_elements;
-                            inline_elements.push_back(ftxui::text("  • ") | ftxui::color(ftxui::Color::Cyan) | ftxui::bold);
-                            append_inline_spans(inline_elements, token.text_slice);
-                            visual_lines.push_back(ftxui::hbox(std::move(inline_elements)) | ftxui::flex);
-                            break;
-                        }
-                        case MuxBlockType::Paragraph: {
-                            ftxui::Elements inline_elements;
-                            append_inline_spans(inline_elements, token.text_slice);
-                            visual_lines.push_back(ftxui::hbox(std::move(inline_elements)) | ftxui::flex);
-                            break;
-                        }
-                        case MuxBlockType::EmptyLine:
-                            visual_lines.push_back(ftxui::text(" "));
-                            break;
-                        default:
-                            break;
-                    }
-                }
-
-                return ftxui::window(ftxui::text(" MUX LIVE PREVIEW ") | ftxui::bold, 
-                                     ftxui::vbox({
-                                         ftxui::vbox(std::move(visual_lines)),
-                                         ftxui::filler()
-                                     })) | ftxui::bgcolor(ftxui::Color::Black);
-            });
-
-            auto dynamic_tabs = ftxui::Container::Tab({ input_window, preview_pane }, &active_tab_);
-            auto global_layout = ftxui::Container::Vertical({ dynamic_tabs, save_input });
-
-            auto global_interface = ftxui::Renderer(global_layout, [&] {
-                ftxui::Element bottom_bar;
-                if (save_mode_active_) {
-                    bottom_bar = ftxui::hbox({
-                        ftxui::text(" Save as: ") | ftxui::bold | ftxui::color(ftxui::Color::Yellow),
-                        save_input->Render() | ftxui::flex,
-                        ftxui::text(" [Press Enter to Confirm] ") | ftxui::dim
-                    });
-                } else {
-                    std::string perf_str = " | Parsed in: " + std::to_string(parse_time_us_).substr(0, 5) + " μs ";
-                    bottom_bar = ftxui::hbox({
-                        ftxui::text(status_message_) | ftxui::color(ftxui::Color::BlueLight),
-                        ftxui::filler(),
-                        ftxui::text(perf_str) | ftxui::color(ftxui::Color::GreenLight) | ftxui::dim
-                    });
-                }
-
-                return ftxui::vbox(
-                    dynamic_tabs->Render() | ftxui::flex,
-                    ftxui::separator(),
-                    bottom_bar
-                ) | ftxui::bgcolor(ftxui::Color::Black);
-            });
-
-            auto event_handler = ftxui::CatchEvent(global_interface, [&](ftxui::Event event) {
-                if (event == ftxui::Event::Special("\x11")) { 
-                    screen.Exit();
+            if (event == ftxui::Event::ArrowDown) {
+                if (scroll_offset_ < total_lines - 5) {
+                    scroll_offset_++;
                     return true;
                 }
-                if (save_mode_active_) {
-                    if (event == ftxui::Event::Return) {
-                        execute_save();
+            }
+            if (event == ftxui::Event::ArrowUp) {
+                if (scroll_offset_ > 0) {
+                    scroll_offset_--;
+                    return true;
+                }
+            }
+            
+            // Intercept mouse wheel actions
+            if (event.is_mouse()) {
+                if (event.mouse().button == ftxui::Mouse::WheelDown) {
+                    if (scroll_offset_ < total_lines - 5) {
+                        scroll_offset_ += 2; // Fast scroll down
+                        if (scroll_offset_ > total_lines - 5) scroll_offset_ = total_lines - 5;
                         return true;
                     }
-                    if (event == ftxui::Event::Escape) {
-                        save_mode_active_ = false;
-                        status_message_ = " Saving cancelled. ";
+                }
+                if (event.mouse().button == ftxui::Mouse::WheelUp) {
+                    if (scroll_offset_ > 0) {
+                        scroll_offset_ -= 2; // Fast scroll up
+                        if (scroll_offset_ < 0) scroll_offset_ = 0;
                         return true;
                     }
-                    return save_input->OnEvent(event);
                 }
-                if (event == ftxui::Event::Special("\x14")) { 
-                    active_tab_ = (active_tab_ == 0) ? 1 : 0;
-                    return true;
-                }
-                if (event == ftxui::Event::Special("\x13")) { 
-                    save_mode_active_ = true;
-                    save_input->TakeFocus();
-                    return true;
-                }
-                return false;
-            });
-
-            screen.Loop(event_handler);
+            }
         }
-    };
-}
+
+        if (active_tab_ == 0) {
+            bool handled = editor_input_field_->OnEvent(event);
+            if (handled) execute_parsing_pipeline();
+            return handled;
+        }
+
+        return global_layout_container_->OnEvent(event);
+    }
+
+    void run() noexcept {
+        auto screen = ftxui::ScreenInteractive::Fullscreen();
+        
+        // Feed window constraints into layout bounds dynamically on render loops
+        auto main_renderer = ftxui::Renderer(global_layout_container_, [&] { 
+            max_visible_lines_ = screen.dimy() - 4; // Track terminal size limits
+            return RenderPane(); 
+        });
+        
+        auto root_loop = ftxui::CatchEvent(main_renderer, [&](ftxui::Event event) {
+            if (event == ftxui::Event::CtrlQ) {
+                screen.ExitLoopClosure()();
+                return true;
+            }
+            return HandleEvent(event);
+        });
+
+        screen.Loop(root_loop);
+    }
+};
+
+} // namespace MuxUI

@@ -1,15 +1,5 @@
-// Copyright (C) 2026 mxreal64 
-// 
-// This program is free software: you can redistribute it and/or modify 
-// it under the terms of the GNU General Public License as published by 
-// the Free Software Foundation, either version 3 of the License, or 
-// (at your option) any later version. // // This program is distributed in the hope that it will be useful, 
-// but WITHOUT ANY WARRANTY; without even the implied warranty of 
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the 
-// GNU General Public License for more details. 
-// 
-// You should have received a copy of the GNU General Public License 
-// along with this program. If not, see <https://gnu.org>.
+// Copyright (C) 2026 mxreal64
+// Licensed under the GPL-3.0 License
 
 module; 
 
@@ -116,7 +106,7 @@ public:
         return tokens_;
     }
 
-    [[nodiscard]] static std::vector<MuxInlineSpan> tokenize_inline(std::string_view text) noexcept {
+       [[nodiscard]] static std::vector<MuxInlineSpan> tokenize_inline(std::string_view text) noexcept {
         std::vector<MuxInlineSpan> spans;
         spans.reserve(8);
 
@@ -151,9 +141,10 @@ public:
                 }
             }
 
-            std::size_t next_bold = text.find("**", pos);
-            std::size_t next_italic = text.find("*", pos);
-            std::size_t next_code = text.find("`", pos);
+            // CRITICAL FIX: Look for the *next* potential delimiter block starting PAST the current character position
+            std::size_t next_bold = text.find("**", pos + 1);
+            std::size_t next_italic = text.find("*", pos + 1);
+            std::size_t next_code = text.find("`", pos + 1);
             std::size_t next_delim = std::string_view::npos;
 
             if (next_bold != std::string_view::npos) next_delim = std::min(next_delim, next_bold);
@@ -165,6 +156,7 @@ public:
                 break;
             }
 
+            // Push everything from current position up to the next valid token character
             if (next_delim > pos) {
                 spans.push_back({MuxTextStyle::Normal, text.substr(pos, next_delim - pos)});
             }
@@ -172,5 +164,5 @@ public:
         }
         return spans;
     }
-};
 
+};
