@@ -1,0 +1,19 @@
+so yeah
+i tried to find a sensible importance user-facing bug (including the resource usage/infinite looping part)
+nothin
+well i was hyped to release 1.0.1 as a bug fix release
+but
+i'm gonna have to skip that
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+mux v1.1.0
+
+new features:
+
+tables (i hope)
+making text different colors
+interactive checklists (prolly)
+and maybe footnotes
+
+it'll take a few days, but i'll relese within this week
