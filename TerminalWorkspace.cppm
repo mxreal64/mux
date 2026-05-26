@@ -28,9 +28,8 @@ private:
     bool save_mode_active_ = false;
     std::string save_path_target_ = "untitled.md";
 
-    // --- SCROLL STATE VARIABLES ---
     int scroll_offset_ = 0;
-    int max_visible_lines_ = 20; // Automatically adjusted at runtime
+    int max_visible_lines_ = 20;
 
     ftxui::Component editor_input_field_;
     ftxui::Component save_input_field_;
@@ -73,7 +72,6 @@ public:
         ftxui::Elements preview_rows;
         const auto& tokens = engine_.get_tokens();
 
-        // 1. Slice your token loop to strictly follow your scroll offset
         for (std::size_t i = static_cast<std::size_t>(scroll_offset_); i < tokens.size(); ++i) {
             const auto& token = tokens[i];
 
@@ -103,23 +101,53 @@ public:
             ftxui::Element assembled_row = ftxui::hbox(std::move(row_spans));
 
             switch (token.type) {
-                case MuxBlockType::Heading1:      preview_rows.push_back(ftxui::bold(assembled_row) | ftxui::color(ftxui::Color::Yellow)); break;
-                case MuxBlockType::Heading2:      preview_rows.push_back(ftxui::bold(assembled_row) | ftxui::color(ftxui::Color::Cyan)); break;
-                case MuxBlockType::Heading3:      preview_rows.push_back(ftxui::bold(assembled_row) | ftxui::color(ftxui::Color::BlueLight)); break;
-                case MuxBlockType::BulletItem:    preview_rows.push_back(ftxui::hbox({ftxui::text(" • ") | ftxui::color(ftxui::Color::Yellow), assembled_row})); break;
-                case MuxBlockType::CodeBlockLine: preview_rows.push_back(ftxui::hbox({ftxui::text("  "), assembled_row | ftxui::color(ftxui::Color::Green)})); break;
-                default:                          preview_rows.push_back(assembled_row); break;
+                case MuxBlockType::Heading1:
+                    preview_rows.push_back(ftxui::hbox({
+                        ftxui::text("=== ") | ftxui::bold | ftxui::color(ftxui::Color::Yellow),
+                        ftxui::bold(assembled_row) | ftxui::color(ftxui::Color::Yellow),
+                        ftxui::text(" ===") | ftxui::bold | ftxui::color(ftxui::Color::Yellow)
+                    }));
+                    break;
+
+                case MuxBlockType::Heading2:
+                    preview_rows.push_back(ftxui::hbox({
+                        ftxui::text("▶ ") | ftxui::bold | ftxui::color(ftxui::Color::Cyan),
+                        ftxui::bold(assembled_row) | ftxui::color(ftxui::Color::Cyan)
+                    }));
+                    break;
+
+                case MuxBlockType::Heading3:
+                    preview_rows.push_back(ftxui::hbox({
+                        ftxui::text("● ") | ftxui::bold | ftxui::color(ftxui::Color::BlueLight),
+                        ftxui::bold(assembled_row) | ftxui::color(ftxui::Color::BlueLight)
+                    }));
+                    break;
+
+                case MuxBlockType::BulletItem:    
+                    preview_rows.push_back(ftxui::hbox({ftxui::text("  • ") | ftxui::color(ftxui::Color::Yellow), assembled_row})); 
+                    break;
+                    
+                case MuxBlockType::CodeBlockLine: 
+                    preview_rows.push_back(ftxui::hbox({ftxui::text("  "), assembled_row | ftxui::color(ftxui::Color::Green)})); 
+                    break;
+                    
+                default:                          
+                    preview_rows.push_back(assembled_row); 
+                    break;
             }
         }
 
-        // 2. Wrap rows cleanly using standard layout constraints
-        auto visible_viewport = ftxui::vbox(std::move(preview_rows)) | ftxui::flex;
+        auto scroll_pane = ftxui::vbox(std::move(preview_rows)) 
+
+                         | ftxui::vscroll_indicator 
+                         | ftxui::frame 
+                         | ftxui::flex;
 
         ftxui::Element center_view;
         if (active_tab_ == 0) {
             center_view = ftxui::window(ftxui::text(" EDITOR ") | ftxui::bold, editor_input_field_->Render() | ftxui::flex);
         } else {
-            center_view = ftxui::window(ftxui::text(" MUX LIVE PREVIEW ") | ftxui::bold, visible_viewport) | ftxui::bgcolor(ftxui::Color::Black);
+            center_view = ftxui::window(ftxui::text(" MUX LIVE PREVIEW ") | ftxui::bold, scroll_pane) | ftxui::bgcolor(ftxui::Color::Black);
         }
 
         ftxui::Element bottom_bar;
@@ -143,19 +171,32 @@ public:
         });
     }
 
-    bool HandleEvent(ftxui::Event event) {
+     bool HandleEvent(ftxui::Event event) {
         if (event == ftxui::Event::CtrlT) {
             active_tab_ = (active_tab_ == 0) ? 1 : 0;
-            // Reset offset when jumping back and forth
             scroll_offset_ = 0; 
             return true;
         }
+        
         if (event == ftxui::Event::CtrlS) {
             save_mode_active_ = !save_mode_active_;
+            if (save_mode_active_) {
+                save_input_field_->TakeFocus(); // <-- FORCE KEYBOARD FOCUS INTO THE FIELD
+            }
             return true;
         }
 
-        // --- INTERCEPT NAVIGATION INPUT CODES IN PREVIEW MODE ---
+        // --- 1. EXPLICIT INTERCEPT FOR SAVE FIELD IF ACTIVE ---
+        if (save_mode_active_) {
+            if (event == ftxui::Event::Escape || event == ftxui::Event::Return) {
+                save_mode_active_ = false; // Close bar on Confirm or Cancel
+                return true;
+            }
+            // Route all characters, backspaces, and deletes straight to the string buffer
+            return save_input_field_->OnEvent(event);
+        }
+
+        // --- 2. PREVIEW WINDOW SCROLL NAVIGATION ---
         if (active_tab_ == 1) {
             const int total_lines = static_cast<int>(engine_.get_tokens().size());
 
@@ -172,18 +213,17 @@ public:
                 }
             }
             
-            // Intercept mouse wheel actions
             if (event.is_mouse()) {
                 if (event.mouse().button == ftxui::Mouse::WheelDown) {
                     if (scroll_offset_ < total_lines - 5) {
-                        scroll_offset_ += 2; // Fast scroll down
+                        scroll_offset_ += 2;
                         if (scroll_offset_ > total_lines - 5) scroll_offset_ = total_lines - 5;
                         return true;
                     }
                 }
                 if (event.mouse().button == ftxui::Mouse::WheelUp) {
                     if (scroll_offset_ > 0) {
-                        scroll_offset_ -= 2; // Fast scroll up
+                        scroll_offset_ -= 2;
                         if (scroll_offset_ < 0) scroll_offset_ = 0;
                         return true;
                     }
@@ -200,12 +240,12 @@ public:
         return global_layout_container_->OnEvent(event);
     }
 
+
     void run() noexcept {
         auto screen = ftxui::ScreenInteractive::Fullscreen();
         
-        // Feed window constraints into layout bounds dynamically on render loops
         auto main_renderer = ftxui::Renderer(global_layout_container_, [&] { 
-            max_visible_lines_ = screen.dimy() - 4; // Track terminal size limits
+            max_visible_lines_ = screen.dimy() - 4;
             return RenderPane(); 
         });
         
