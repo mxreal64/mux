@@ -2,7 +2,7 @@
 
 A blazing-fast, bare-metal Markdown compilation engine and text viewer built entirely inside the terminal. No Electron. No Chromium bloat. Zero browser engine overhead. 
 
-Mux processes text streams via a low-latency, single-pass memory scanner and renders visual structures instantly in a modern terminal framework—consuming less than **5MB of RAM** at runtime.
+Mux processes text streams via a low-latency, single-pass memory scanner and renders visual structures instantly in a modern terminal framework—consuming less than **10MB of RAM** at runtime.
 
 ---
 
