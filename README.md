@@ -18,6 +18,7 @@ Mux processes text streams via a low-latency, single-pass memory scanner and ren
 * `Ctrl + T` : Toggle screen views instantly (Editor Mode $\longleftrightarrow$ Fullscreen Preview Mode).
 * `Ctrl + S` : Intercepts layout focus to open a dynamic filename input prompt for committing buffers directly to disk.
 * `Ctrl + Q` : Force-exits application event loops and cleans terminal screen registers safely.
+* `Ctrl + F` : Find/Replace
 
 ---
 
