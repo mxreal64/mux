@@ -1,8 +1,8 @@
-# Mux 
+# mux 
 
 A blazing-fast, bare-metal Markdown compilation engine and text viewer built entirely inside the terminal. No Electron. No Chromium bloat. Zero browser engine overhead. 
 
-Mux processes text streams via a low-latency, single-pass memory scanner and renders visual structures instantly in a modern terminal framework—consuming less than **10MB of RAM** at runtime.
+mux processes text streams via a low-latency, single-pass memory scanner and renders visual structures instantly in a modern terminal framework—consuming less than **10MB of RAM** at runtime.
 
 ---
 
@@ -24,7 +24,7 @@ Mux processes text streams via a low-latency, single-pass memory scanner and ren
 
 ##  Build and Compilation Pipeline
 
-Mux bypasses heavy, bloated build system tools like CMake. You can compile the full modular dependency tree directly from your shell layout using a recent **GCC (14/15/16+)** or **Clang** compiler toolchain.
+mux bypasses heavy, bloated build system tools like CMake. You can compile the full modular dependency tree directly from your shell layout using a recent **GCC (14/15/16+)** or **Clang** compiler toolchain.
 
 ### 1. Build the Standard Module Cache
 *Because GCC doesn't ship pre-compiled system binaries for modules out of the box, generate your system's `std.gcm` cache folder exactly once:*
@@ -46,7 +46,7 @@ g++ -std=c++26 -fmodules-ts -c TerminalWorkspace.cppm -o build/TerminalWorkspace
 g++ -std=c++26 -fmodules-ts main.cpp build/MuxParser.o build/TerminalWorkspace.o $(pkg-config --libs ftxui) -o build/Mux
 ```
 
-### 4. Execute Mux
+### 4. Execute mux
 ```bash
 ./build/Mux
 ```
